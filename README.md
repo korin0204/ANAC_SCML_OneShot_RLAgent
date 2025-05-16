@@ -4,10 +4,17 @@ This project requires python version "3.11.0" <= "3.11.11".
 
 To protect local env, I recommend using "pyenv" and "venv".
 
-## How to train
-If you want to train a model, set flag `test_only = False` in `train.py`.
+Creating and activating virtual environment can below code.
+```
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt
+```
 
-If you want to use existed model to train a model, set flag `add_learn = True` in `train.py`.
+## How to train
+If you want to train a model, set flag `test_only = False` in `train.py` and run it.
+
+If you want to use existed model to additional training, set flag `add_learn = True` in `train.py` and run it.
 
 ## How to test your trained model
 To test world using a context,
