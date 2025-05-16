@@ -11,7 +11,7 @@ If you want to use existed model to train a model, set flag `add_learn = True` i
 
 ## How to test your trained model
 To test world using a context,
-set flag `test_only = False` in `train.py`. And
+set flag `test_only = True` in `train.py`. And
 ```
 python3 -m RLAgent.train
 ```
