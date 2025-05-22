@@ -15,7 +15,7 @@ def run(
     competitors=tuple(),
     competition="oneshot",
     reveal_types=True,
-    n_steps=20,
+    n_steps=50, #50日
     n_configs=1,
     debug=True,
     serial=False,

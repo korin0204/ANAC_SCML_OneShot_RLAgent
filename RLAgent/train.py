@@ -358,14 +358,14 @@ def main(ntrain: int = NTRAINING):
     # fixed: Supports a single world configuration
     # limited: Supports a limited range of world configuration
     # unlimited: Supports any range of world configurations
-    test_only = False
+    test_only = True
     if test_only:
         as_supplier = False
         strength=2
         # 4-8
         model_path = (
             MODEL_PATH.parent
-            / f"{MODEL_PATH.name}{'_supplier' if as_supplier else '_consumer'}{'_4-8_A2C_tanh_640000'}"
+            / f"{MODEL_PATH.name}{'_supplier' if as_supplier else '_consumer'}{'_4-8_PPO_tanh_double_300000'}"
         )
         
         # 4-4
@@ -437,7 +437,7 @@ def main(ntrain: int = NTRAINING):
                     # decide the model path to save to
                     model_path = (
                         MODEL_PATH.parent
-                        / f"{MODEL_PATH.name}{'_supplier' if as_supplier else '_consumer'}{'_4-8_A2C_tanh_'}{NTRAINING}"
+                        / f"{MODEL_PATH.name}{'_supplier' if as_supplier else '_consumer'}{'_4-8_PPO_tanh_double_'}{NTRAINING}"
                     )
 
                 # save the model

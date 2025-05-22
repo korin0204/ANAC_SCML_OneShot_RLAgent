@@ -37,8 +37,8 @@ class MyAgent(OneShotRLAgent):
         # get full path to models (supplier and consumer models).
         base_name = MODEL_PATH.name
         self.paths = [
-            MODEL_PATH.parent / f"{base_name}_supplier_4-8_A2C_tanh_640000",
-            MODEL_PATH.parent / f"{base_name}_consumer_4-8_A2C_tanh_640000",
+            MODEL_PATH.parent / f"{base_name}_supplier_4-8_PPO_tanh_double_400000",
+            MODEL_PATH.parent / f"{base_name}_consumer_4-8_PPO_tanh_double_300000",
         ]
         models = tuple(model_wrapper(TrainingAlgorithm.load(_)) for _ in self.paths)
         # contexts = (make_context(as_supplier=True), make_context(as_supplier=False))
@@ -63,15 +63,60 @@ class MyAgent(OneShotRLAgent):
         # Initialize the base OneShotRLAgent with model paths and observation managers.
         super().__init__(*args, **kwargs)
 
+class EpsilonGreedyAgent1(EpsilonGreedyAgent):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+class EpsilonGreedyAgent2(EpsilonGreedyAgent):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+class EpsilonGreedyAgent3(EpsilonGreedyAgent):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+class MatchingPennies1(MatchingPennies):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+class MatchingPennies2(MatchingPennies):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+class MatchingPennies3(MatchingPennies):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+class DistRedistAgent1(DistRedistAgent):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+class DistRedistAgent2(DistRedistAgent):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+class DistRedistAgent3(DistRedistAgent):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
 
 if __name__ == "__main__":
     from .helpers.runner import run
 
     run([MyAgent, 
          MatchingPennies,
+        #  MatchingPennies1,
+        #  MatchingPennies2,
+        #  MatchingPennies3,
          DistRedistAgent,
+        #  DistRedistAgent1,
+        #  DistRedistAgent2,
+        #  DistRedistAgent3,
          EpsilonGreedyAgent,
+        #  EpsilonGreedyAgent1,
+        #  EpsilonGreedyAgent2,
+        #  EpsilonGreedyAgent3,
          SuzukaAgent,
-         RandDistOneShotAgent,
-         EqualDistOneShotAgent,
+        #  RandDistOneShotAgent,
+        #  EqualDistOneShotAgent,
          ])
