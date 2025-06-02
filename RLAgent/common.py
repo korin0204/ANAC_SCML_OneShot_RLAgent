@@ -7,7 +7,8 @@ from negmas.outcomes import Outcome
 from scml.oneshot.rl.observation import FlexibleObservationManager
 from scml.oneshot.awi import OneShotAWI
 from scml.oneshot.context import GeneralContext, SupplierContext, ConsumerContext
-from stable_baselines3 import A2C, HerReplayBuffer, PPO
+# from stable_baselines3 import A2C, HerReplayBuffer, PPO
+from stable_baselines3 import PPO
 from stable_baselines3.common.base_class import BaseAlgorithm
 
 from typing import Iterable
@@ -24,7 +25,7 @@ from typing import Mapping, TypeVar
 from scml.oneshot.common import QUANTITY, TIME, UNIT_PRICE, OneShotState
 from scml.oneshot.rl.common import group_partners
 
-TrainingAlgorithm: type[BaseAlgorithm] = A2C
+TrainingAlgorithm: type[BaseAlgorithm] = PPO
 """The algorithm used for training. You can use any stable_baselines3 algorithm or develop your own"""
 
 MODEL_PATH = Path(__file__).parent / "models" / "mymodel"
@@ -65,13 +66,13 @@ class MyObservationManager(FlexibleObservationManager):
                     * self.n_partners
                 )
             )
-            + list(
-                itertools.chain(
-                    [self.max_group_size * self.max_quantity + 1, self.n_prices, 2]
-                    * self.n_partners
-                    * self.n_past_received_offers
-                )
-            )
+            # + list(
+            #     itertools.chain(
+            #         [self.max_group_size * self.max_quantity + 1, self.n_prices, 2]
+            #         * self.n_partners
+            #         * self.n_past_received_offers
+            #     )
+            # )
             + [self.max_quantity + 1] * 2  # needed sales and supplies
             + [self.n_bins] * 1  # level
             # + [self.n_bins] * 1  # relative_simulation
@@ -115,15 +116,15 @@ class MyObservationManager(FlexibleObservationManager):
             assert (
                 len(current_offers) == self.n_partners * 3
             ), f"{len(current_offers)=} but {self.n_partners=}"
-            assert (
-                len(self._previous_offers)
-                == self.n_past_received_offers * self.n_partners * 3
-            ), f"{self._previous_offers=} but {self.n_partners=}"
+            # assert (
+            #     len(self._previous_offers)
+            #     == self.n_past_received_offers * self.n_partners * 3
+            # ), f"{self._previous_offers=} but {self.n_partners=}"
 
         extra = self.extra_obs(awi) # 追加の観測情報について取得
         v = np.asarray(
             current_offers
-            + list(self._previous_offers)
+            # + list(self._previous_offers)
             + (
                 [min(1, max(0, v[0] if isinstance(v, Iterable) else v)) for v in extra]
                 if self.continuous
@@ -140,9 +141,9 @@ class MyObservationManager(FlexibleObservationManager):
         if self.continuous:
             v = np.minimum(np.maximum(v, 0.0), 1.0)
 
-        if self._previous_offers:
-            for _ in current_offers:
-                self._previous_offers.append(_) # 過去のオファーリストの更新
+        # if self._previous_offers:
+        #     for _ in current_offers:
+        #         self._previous_offers.append(_) # 過去のオファーリストの更新
         if self.extra_checks:
             space = self.make_space()
             assert self.continuous or isinstance(space, spaces.MultiDiscrete)

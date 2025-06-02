@@ -30,12 +30,12 @@ N_CONSUMERS = (4, 8)
 
 DefaultAgentsOneShot = (
     # CautiousOneShotAgent,
-    MatchingPennies,
+    # MatchingPennies,
     DistRedistAgent,
-    EpsilonGreedyAgent,
-    SuzukaAgent,
-    RandDistOneShotAgent,
-    EqualDistOneShotAgent,
+    # EpsilonGreedyAgent,
+    # SuzukaAgent,
+    # RandDistOneShotAgent,
+    # EqualDistOneShotAgent,
 )
 
 class MySupplierContext(LimitedPartnerNumbersOneShotContext):
@@ -45,6 +45,7 @@ class MySupplierContext(LimitedPartnerNumbersOneShotContext):
             max(N_SUPPLIERS[1], N_CONSUMERS[1]),  # type: ignore
         )
         kwargs |= dict(
+            n_steps(100,100),
             n_suppliers=(0, 0),  # suppliers have no suppliers
             n_consumers=N_CONSUMERS,
             n_competitors=(N_SUPPLIERS[0] - 1, N_SUPPLIERS[1] - 1),
@@ -65,6 +66,7 @@ class MyConsumerContext(LimitedPartnerNumbersOneShotContext):
             max(N_SUPPLIERS[1], N_CONSUMERS[1]),  # type: ignore
         )
         kwargs |= dict(
+            n_steps(100,100),
             n_suppliers=N_SUPPLIERS,
             n_consumers=(0, 0),  # consumers have no consumers
             n_competitors=(N_CONSUMERS[0] - 1, N_CONSUMERS[1] - 1),

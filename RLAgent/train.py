@@ -7,7 +7,6 @@ from negmas.sao import SAOResponse
 from rich import print
 from scml.oneshot.awi import OneShotAWI
 from scml.oneshot.rl.action import FlexibleActionManager
-from scml.oneshot.rl.observation import FlexibleObservationManager
 from scml.oneshot.rl.agent import OneShotRLAgent
 from scml.oneshot.rl.common import model_wrapper
 from scml.oneshot.rl.env import OneShotEnv
@@ -15,21 +14,15 @@ from scml.oneshot.rl.reward import DefaultRewardFunction
 
 # sys.path.append(str(Path(__file__).parent))
 from .common import MODEL_PATH, MyObservationManager, TrainingAlgorithm, make_context
+from .myaction import MyActionManager, CustomActionWrapper
 
-from scml.oneshot.context import GeneralContext, SupplierContext, ConsumerContext
-from .mycontext import MySupplierContext, MyConsumerContext
-# from .myaction import MyActionManager
-# from .myrlagent import MyOneShotRLAgent, set_negotiation_failure, set_negotiation_success, get_negotiation_failure, get_negotiation_success
+NTRAINING = 300000  # number of training steps
 
+from stable_baselines3.common.callbacks import CheckpointCallback
+checkpoint_callback = CheckpointCallback(save_freq=50000, save_path='./oneshot_rl/myagent/models/checkpoints/',
+                                         name_prefix='ppo_model')
 import numpy as np
-
-NTRAINING = 10000  # number of training steps /1000~5000steps per episode
-NADDTRAINING = 10000  # number of training steps /1000~5000steps per episode
-
-import os
-import csv
-TEMP_LOG_PATH = "oneshot_rl/myagent/train_log/profit.csv"
-
+from pathlib import Path
 from itertools import chain, combinations
 
 def powerset(offer_list):
@@ -179,6 +172,7 @@ class MyRewardFunction(DefaultRewardFunction):
 
 
     def __call__(self, awi: OneShotAWI, action: dict[str, SAOResponse], info: dict) -> float:
+        '''
         """
         Calculate the reward based on profit and successful contracts.
         """
@@ -215,75 +209,61 @@ class MyRewardFunction(DefaultRewardFunction):
             if (level == 0):
                 if(needed_sales > -1): # 0, 1, 2, ...
                     """金額ベース報酬"""
-                    # reward += (awi.trading_prices[1] - 1) * (info["needed_sales"] - needed_sales) # 販売の利益 l0 安い方で見積もる
-                    # reward += (current_disposal_cost) * (info["needed_sales"] - needed_sales) # 支払う必要のなくなった廃棄コスト
-                    """回数ベース報酬"""
                     if (info["needed_sales"] - needed_sales) > 0: # 残りの数に変化があれば
-                        reward += (awi.trading_prices[1] - 1) * (info["needed_sales"] - needed_sales)
+                        reward += (awi.trading_prices[1] - 1) * (info["needed_sales"] - needed_sales) # 売れた利益を報酬
+                    else: # 残りの数に変化がなければ
+                        reward -= 0.25 * ((awi.trading_prices[1] - 1) * (needed_sales)) # 現在の売れ残りの0.01倍をペナルティとして与える
                 else:
                     """金額ベース報酬"""
-                    # if info["needed_sales"] > -1:
-                        # reward += (awi.trading_prices[1] - 1) * (info["needed_sales"] - 0) # 販売の利益 l0 安い方で見積もる
-                        # reward += (current_disposal_cost) * (info["needed_sales"] - 0) # 支払う必要のなくなった廃棄コスト
-                        # reward -= (current_shortfall_penalty) * (0 - needed_sales) # 多く売りすぎてしまったときに発生する不足ペナルティ
-                    """回数ベース報酬"""
                     if (info["needed_sales"] - needed_sales) > 0: # 残りの数に変化があれば
-                        reward -= (current_shortfall_penalty) * (0 - needed_sales)
+                        reward += (awi.trading_prices[1] - 1) * (info["needed_sales"] - 0) # 販売の利益 l0 安い方で見積もる
+                        reward -= (current_shortfall_penalty) * (awi.trading_prices[1]) * (0 - needed_sales) # 売りすぎた量にペナルティ
 
             else:
                 if(needed_supplies > -1):
                     """金額ベース報酬"""
-                    # reward += (awi.trading_prices[2] - 1) * (info["needed_supplies"] - needed_supplies) # 最終製品を売ることで得られる利益
-                    # reward += (current_shortfall_penalty) * (info["needed_supplies"] - needed_supplies) # 商品を仕入れることで払う必要のなくなった不足ペナルティの量 l1
-                    """回数ベース報酬"""
                     if (info["needed_supplies"] - needed_supplies) > 0: # 残りの数に変化があれば
                         reward += (awi.trading_prices[2] - 1) * (info["needed_supplies"] - needed_supplies)
+                    else: # 残りの数に変化がなければ
+                        reward -= 0.25 * ((awi.trading_prices[2] - 1) * (needed_supplies)) # 現在の仕入れ足りない量の0.01倍をペナルティとして与える
                 else:
                     """金額ベース報酬"""
-                    # if info["needed_supplies"] > -1:
-                        # reward += (awi.trading_prices[2] - 1) * (info["needed_supplies"] - 0) # 最終製品を売ることで得られる利益
-                        # reward += (current_shortfall_penalty) * (info["needed_supplies"] - 0) # 商品を仕入れることで払う必要のなくなった不足ペナルティの量 l1
-                        # reward -= (current_disposal_cost) * (0 - needed_supplies) # 多く仕入れすぎたことによって発生する廃棄コスト
-                    """回数ベース報酬"""
                     if (info["needed_supplies"] - needed_supplies) > 0:
-                        reward -= (current_disposal_cost) * (0 - needed_supplies)
+                        reward += (awi.trading_prices[2] - 1) * (info["needed_supplies"] - 0) # 最終製品を売ることで得られる利益
+                        reward -= (current_disposal_cost) * (awi.trading_prices[2]) * (0 - needed_supplies)
         
-        # reward *= 0.05 # 報酬を0.1倍することで、報酬のスケールを調整する
+        # reward *= 0.25 # 報酬を0.1倍することで、報酬のスケールを調整する
+        # print(f"step: {current_step}, reward: {reward}") # 報酬を表示
+        # print(f"needed_sales: {needed_sales}, needed_supplies: {needed_supplies}") # 売り残りと仕入れ足りない量を表示
+
+        # reward = (np.tanh(reward/50))/2 # 報酬を正則化する
+        reward = (np.tanh(reward/50))/3 # 報酬を正則化する
 
         # 所持金の増加量を計算
         profit = current_balance - info["balance"] # -500~500程度
         # print(f"profit: {profit}") # 所持金の変化を表示
+        # profit = (np.tanh(profit/60))/2 # 利益を正則化する
+        profit = (np.tanh(profit/60))/1.5 # 利益を正則化する
         reward += profit # 所持金の変化を報酬に加算
-        # offer(量, 時間(無視される), 単価)
-        # if profit > 0:
-        #     reward += 1
-        # else:
-        #     reward -= 1
-
-        # # 数量部分を加算
-        # total_offer_quantity = sum(quantity for quantity, _ in offer_list) # 提案した数量
-        # total_offered_quantity = sum(quantity for quantity, _ in offered_list) # 提案された数量
 
 
         """提案戦略"""
-        # if (level == 0) and (total_offered_quantity < needed_sales): # もらった提案が必要数に満たない場合
-        #     if(total_offer_quantity == (needed_sales - total_offered_quantity)): # 自分の提案で必要数を満たすようにしている場合
-        #         reward += 1
-        #     else: # 自分の提案で必要数を満たしていない場合
-        #         None
-        # elif (level == 1) and (total_offered_quantity < needed_supplies): # もらった提案が必要数に満たない場合
-        #     if(total_offer_quantity == (needed_supplies - total_offered_quantity)): # 自分の提案で必要数を満たすようにしている場合
-        #         reward += 1
-        #     else: # 自分の提案で必要数を満たしていない場合
-        #         None
+        # l0では廃棄が起こる=売れ残りの分の収益がなく損=多少の不足は許容
+        # l1では不足が起こる=最終製品を作れないので利益減=多少の廃棄は許容
+        
         
         # print(f"reward: {reward}") # 報酬を表示
         # 正則化
-        reward = np.tanh(reward/30) # 報酬を正則化する
+        
+        # print(f"scale_reward: {reward}") # 報酬を表示
+        # input()
+        '''
+        reward = awi.current_balance - info["balance"]
+        reward = np.tanh(reward/60)
+
         return reward
 
 
-# OneShotEnvが定義する行動空間や観測や報酬など様々なことについてmake_envで設定する
 def make_env(as_supplier, log: bool = False) -> OneShotEnv:
     log_params: dict[str, Any] = (
         dict(
@@ -309,16 +289,13 @@ def make_env(as_supplier, log: bool = False) -> OneShotEnv:
             ignore_simulation_exceptions=False,
         )
     )
-    # context = make_context(as_supplier, strength)
-    context = MySupplierContext() if as_supplier else MyConsumerContext()
-    # context = SupplierContext() if as_supplier else ConsumerContext()
+    context = make_context(as_supplier)
     return OneShotEnv(
-        action_manager=FlexibleActionManager(context=context), # Agentの行動を管理 行動空間(提示価格や数量,交渉の拒否)をA2Cに渡す
-        # action_manager=MyActionManager(context=context),  # type: ignore # Agentの行動を管理 行動空間(提示価格や数量,交渉の拒否)をA2Cに渡す
-        observation_manager=MyObservationManager(context=context),  # type: ignore # 環境の観測者
-        # observation_manager=FlexibleObservationManager(context=context),  # type: ignore # 環境の観測者
-        reward_function=MyRewardFunction(), # 報酬関数を指定
-        context=context, # 環境のコンテキストを指定
+        # action_manager=FlexibleActionManager(context=context),
+        action_manager=MyActionManager(context=context),
+        observation_manager=MyObservationManager(context=context),  # type: ignore
+        reward_function=MyRewardFunction(),
+        context=context,
         extra_checks=False,
     )
 
@@ -326,16 +303,12 @@ def make_env(as_supplier, log: bool = False) -> OneShotEnv:
 def try_a_model(
     model,
     as_supplier: bool,
-    strength: int,
 ):
     """Runs a single simulation with one agent controlled with the given model"""
 
     obs_type = MyObservationManager
-    # obs_type = FlexibleObservationManager
     # Create a world context compatibly with the model
-    # context = make_context(as_supplier, strength)
-    context = MySupplierContext() if as_supplier else MyConsumerContext()
-    # context = SupplierContext() if as_supplier else ConsumerContext()
+    context = make_context(as_supplier)
     # sample a world and the RL agents (always one in this case)
     world, _ = context.generate(
         types=(OneShotRLAgent,),
@@ -343,8 +316,8 @@ def try_a_model(
             dict(
                 models=[model_wrapper(model)],
                 observation_managers=[obs_type(context)],
-                action_managers=[FlexibleActionManager(context)],
-                # action_managers=[MyActionManager(context)],
+                # action_managers=[FlexibleActionManager(context)],
+                action_managers=[MyActionManager(context, mode=1)],
             ),
         ),
     )
@@ -354,102 +327,72 @@ def try_a_model(
 
 
 def main(ntrain: int = NTRAINING):
+    ADDLEARN =  True
+    
     # choose the type of the model. Possibilities supported are:
     # fixed: Supports a single world configuration
     # limited: Supports a limited range of world configuration
     # unlimited: Supports any range of world configurations
-    test_only = True
-    if test_only:
-        as_supplier = False
-        strength=2
-        # 4-8
-        model_path = (
-            MODEL_PATH.parent
-            / f"{MODEL_PATH.name}{'_supplier' if as_supplier else '_consumer'}{'_4-8_PPO_tanh_double_300000'}"
-        )
-        
-        # 4-4
-        # model_path = (
-        #     MODEL_PATH.parent
-        #     / f"{MODEL_PATH.name}{'_supplier' if as_supplier else '_consumer'}{'_add_learn_2000000'}"
-        # )
 
+    for as_supplier in (True,): # Suppliersの時のみを考える
+        if not ADDLEARN:
+            print(f"Training as {'supplier' if as_supplier else 'consumer'}")
+            # create a gymnasium environment for training
+            env = make_env(as_supplier)
+            env = CustomActionWrapper(env)
 
-        # なぜかlearnをはさむとテスト時のエージェントの位置が変わる
-        env = make_env(as_supplier, strength)
-        model = TrainingAlgorithm(  # type: ignore learning_rate must be passed by the algorithm itself
-                        "MlpPolicy", env, verbose=1, 
-                        # tensorboard_log="./learn_log/"
-                    )
+            # choose a training algorithm
+            model = TrainingAlgorithm(  # type: ignore learning_rate must be passed by the algorithm itself
+                "MlpPolicy", env, verbose=1, tensorboard_log="./oneshot_rl/myagent/learn_logs/"
+            )
 
-        # train the model
-        model.learn(total_timesteps=1,
-                    progress_bar=False,
-                    log_interval=100,
-                    )
-        # model.save(model_path)
+            # train the model
+            model.learn(total_timesteps=ntrain,
+                                    progress_bar=True,
+                                    # log_interval=100,
+                                    callback=checkpoint_callback,
+                                    reset_num_timesteps=True,
+                                    )
+            print(
+                f"\tFinished training the model for {ntrain} steps ... Testing it on a single world simulation"
+            )
+
+            # decide the model path to save to
+            model_path = (
+                MODEL_PATH.parent
+                / f"{MODEL_PATH.name}{'_supplier' if as_supplier else '_consumer'}{NTRAINING}"
+            )
+        else:
+            print(f"Add training as {'supplier' if as_supplier else 'consumer'}")
+            model_path = (
+                MODEL_PATH.parent
+                / f"{MODEL_PATH.name}{'_supplier' if as_supplier else '_consumer'}{'300000'}"
+            )
+            model = TrainingAlgorithm.load(model_path)
+            env = make_env(as_supplier)
+            model.set_env(env)
+            model.learn(
+                total_timesteps=ntrain,
+                progress_bar=True,
+                # log_interval=100,
+                callback=checkpoint_callback,
+                reset_num_timesteps=False,
+            )
+            model_path = (
+                MODEL_PATH.parent
+                / f"{MODEL_PATH.name}{'_supplier' if as_supplier else '_consumer'}{300000 + ntrain}"
+            )
+            
+            
+        # save the model
+        model.save(model_path)
+        # remove the in-memory model
         del model
-
-
-
-        print("評価をする")
+        # load the model
         model = TrainingAlgorithm.load(model_path)
         # try the model in a single simulation
-        world = try_a_model(model, as_supplier, strength)
+        world = try_a_model(model, as_supplier)
         print(world.scores())
-
-    else:
-        for as_supplier in (True, False):
-            # for strength in (-1, 0, 1):
-                strength=2
-                add_learn = True # you can set this to True to add learn
-                if add_learn:
-                    model_path = MODEL_PATH.parent / f"{MODEL_PATH.name}{'_supplier' if as_supplier else '_consumer'}{'_4-8_A2C_tanh_'}{'640000'}"
-                    model = TrainingAlgorithm.load(model_path)
-                    env = make_env(as_supplier)
-                    model.set_env(env)
-                    model.learn(total_timesteps=NADDTRAINING, progress_bar=True, log_interval=100)
-                    model_path = MODEL_PATH.parent / f"{MODEL_PATH.name}{'_supplier' if as_supplier else '_consumer'}{'_4-8_A2C_tanh_'}{640000 + NADDTRAINING}"
-                else:
-                    # create a gymnasium environment for training
-                    env = make_env(as_supplier)
-
-                    # choose a training algorithm
-                    # 引数のenvによって行動空間や観測空間が決まる
-                    # それをもとにA2Cが学習する
-                    # A2Cの場合
-                    model = TrainingAlgorithm(  # type: ignore learning_rate must be passed by the algorithm itself
-                        "MlpPolicy", 
-                        env, 
-                        verbose=1, 
-                        tensorboard_log="./learn_log/"
-                    )
-
-                    # train the model
-                    model.learn(total_timesteps=ntrain,
-                                progress_bar=True,
-                                log_interval=100,
-                                )
-                    print(
-                        f"\tFinished training the model for {ntrain} steps ... Testing it on a single world simulation"
-                    )
-
-                    # decide the model path to save to
-                    model_path = (
-                        MODEL_PATH.parent
-                        / f"{MODEL_PATH.name}{'_supplier' if as_supplier else '_consumer'}{'_4-8_PPO_tanh_double_'}{NTRAINING}"
-                    )
-
-                # save the model
-                model.save(model_path)
-                # remove the in-memory model
-                del model
-                # load the model
-                print("評価をします")
-                model = TrainingAlgorithm.load(model_path)
-                # try the model in a single simulation
-                world = try_a_model(model, as_supplier, strength)
-                print(world.scores())
 
 
 if __name__ == "__main__":
